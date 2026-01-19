@@ -37,13 +37,15 @@ public class MainHook implements IXposedHookLoadPackage {
                         newPath = externalFilesDir.getAbsolutePath() + "/sdcard";
                         new File(newPath).mkdirs();
                         
+                        // 初始化 Java Hook
                         JavaHook.init(newPath);
                         
+                        // 初始化 Native Hook
                         try {
-                            System.loadLibrary("native_hook");
                             NativeHook.initialize(newPath);
-                            initialized = true;
                         } catch (Exception ignored) {}
+                        
+                        initialized = true;
                     }
                 }
             }

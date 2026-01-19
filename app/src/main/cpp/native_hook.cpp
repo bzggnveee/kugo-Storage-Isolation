@@ -83,38 +83,3 @@ Java_com_example_storageredirect_NativeHook_redirectPath(
     
     return env->NewStringUTF(redirected.c_str());
 }
-```
-
-## 简化 `CMakeLists.txt`（不依赖 Dobby）
-
-```cmake
-cmake_minimum_required(VERSION 3.22.1)
-project("native_hook")
-
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -fvisibility=hidden")
-
-# 创建共享库
-add_library(native_hook SHARED native_hook.cpp)
-
-# 不需要链接任何额外库
-```
-
-## 更新 `NativeHook.java`
-
-```java
-package com.example.storageredirect;
-
-public class NativeHook {
-    
-    static {
-        try {
-            System.loadLibrary("native_hook");
-        } catch (UnsatisfiedLinkError e) {
-            // 忽略加载失败
-        }
-    }
-
-    public static native void initialize(String newPath);
-    public static native String redirectPath(String path);
-}

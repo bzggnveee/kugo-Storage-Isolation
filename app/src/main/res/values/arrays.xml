@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="xposed_scope">
+        <item>com.kugou.android.lite</item>
+        <!-- 添加其他需要重定向的应用包名 -->
+    </string-array>
+</resources>

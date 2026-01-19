@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">存储重定向</string>
+    <string name="xposed_description">将应用外部存储重定向到私有目录</string>
+</resources>

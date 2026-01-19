@@ -1,4 +1,3 @@
-
 name: Build APK
 
 on:
@@ -28,7 +27,6 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      # 修复：使用正确的 Gradle 版本号
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
         with:
@@ -43,27 +41,8 @@ jobs:
           chmod +x gradlew
           ./gradlew --version
 
-      - name: Generate signing keystore
-        run: |
-          keytool -genkey -v \
-            -keystore release.keystore \
-            -alias release \
-            -keyalg RSA \
-            -keysize 2048 \
-            -validity 10000 \
-            -storepass android \
-            -keypass android \
-            -dname "CN=StorageRedirect, OU=Dev, O=StorageRedirect, L=Unknown, S=Unknown, C=US"
-
-      - name: Create keystore.properties
-        run: |
-          cat > keystore.properties << EOF
-          storeFile=release.keystore
-          storePassword=android
-          keyAlias=release
-          keyPassword=android
-          EOF
-
+      # 移除了签名生成步骤
+      
       - name: Build Release APK
         run: ./gradlew assembleRelease --stacktrace --no-daemon
 
@@ -123,49 +102,5 @@ jobs:
           draft: false
           prerelease: false
           generate_release_notes: true
-          body: |
-            ## Storage Redirect Module v${{ steps.version.outputs.version_name }}
-            
-            ### 功能
-            - 🔄 重定向外部存储到应用私有目录
-            - 🎵 豁免音乐下载目录 `kgmusic`
-            - 🔧 Java + Native 双层 Hook
-            - 🎯 目标应用：酷狗音乐 Lite
-            
-            ### 安装
-            1. 安装 LSPosed 框架
-            2. 在 LSPosed 中启用本模块
-            3. 勾选：`com.kugou.android.lite`
-            4. 重启目标应用
-            
-            ### 文件
-            - `release.apk` - 正式版（推荐）
-            - `debug.apk` - 调试版
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Generate build summary
-        if: success()
-        run: |
-          echo "## 🎉 Build Successful" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          
-          for apk in output/*.apk; do
-            if [ -f "$apk" ]; then
-              filename=$(basename "$apk")
-              size=$(ls -lh "$apk" | awk '{print $5}')
-              md5=$(md5sum "$apk" | awk '{print $1}')
-              sha256=$(sha256sum "$apk" | awk '{print $1}')
-              
-              echo "### 📦 $filename" >> $GITHUB_STEP_SUMMARY
-              echo "- **Size**: $size" >> $GITHUB_STEP_SUMMARY
-              echo "- **MD5**: \`$md5\`" >> $GITHUB_STEP_SUMMARY
-              echo "- **SHA256**: \`$sha256\`" >> $GITHUB_STEP_SUMMARY
-              echo "" >> $GITHUB_STEP_SUMMARY
-            fi
-          done
-          
-          echo "### ℹ️ Version" >> $GITHUB_STEP_SUMMARY
-          echo "- Name: ${{ steps.version.outputs.version_name }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Code: ${{ steps.version.outputs.version_code }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Commit: \`${GITHUB_SHA:0:7}\`" >> $GITHUB_STEP_SUMMARY

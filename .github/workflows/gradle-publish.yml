@@ -9,9 +9,6 @@ on:
     tags:
       - 'v*'
   pull_request:
-    branches:
-      - main
-      - master
   workflow_dispatch:
 
 jobs:
@@ -27,21 +24,19 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
-          cache: gradle
 
-      # 新增：安装 Gradle 并生成 wrapper
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
-        with:
-          gradle-version: 8.1.0
-
-      - name: Generate Gradle Wrapper (if not exists)
+      # 直接使用 Gradle Wrapper
+      - name: Create Gradle Wrapper
         run: |
-          if [ ! -f "gradlew" ]; then
-            echo "Generating Gradle wrapper..."
-            gradle wrapper --gradle-version 8.1.0
-          fi
+          # 下载并安装 Gradle
+          wget https://services.gradle.org/distributions/gradle-8.1-bin.zip
+          unzip -q gradle-8.1-bin.zip
+          export PATH=$PWD/gradle-8.1/bin:$PATH
+          
+          # 生成 wrapper
+          gradle wrapper --gradle-version=8.1
           chmod +x gradlew
+          ./gradlew --version
 
       - name: Generate signing keystore
         run: |
@@ -53,9 +48,7 @@ jobs:
             -validity 10000 \
             -storepass android \
             -keypass android \
-            -dname "CN=StorageRedirect, OU=Dev, O=StorageRedirect, L=Unknown, S=Unknown, C=US"
-          
-          echo "Keystore generated successfully"
+            -dname "CN=SR, OU=Dev, O=SR, L=City, S=State, C=US"
 
       - name: Create keystore.properties
         run: |
@@ -66,21 +59,9 @@ jobs:
           keyPassword=android
           EOF
 
-      - name: Cache Gradle packages
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-
-
-      - name: Build Release APK
-        run: ./gradlew assembleRelease --stacktrace --no-daemon
-
-      - name: Build Debug APK
-        run: ./gradlew assembleDebug --stacktrace --no-daemon
+      - name: Build APKs
+        run: |
+          ./gradlew assembleRelease assembleDebug --stacktrace --no-daemon
 
       - name: Get version info
         id: version
@@ -91,101 +72,38 @@ jobs:
           echo "version_code=$VERSION_CODE" >> $GITHUB_OUTPUT
           
           if [[ $GITHUB_REF == refs/tags/* ]]; then
-            TAG_NAME=${GITHUB_REF#refs/tags/}
-            echo "file_suffix=$TAG_NAME" >> $GITHUB_OUTPUT
+            echo "file_suffix=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
           else
-            SHORT_SHA=$(echo $GITHUB_SHA | cut -c1-7)
-            echo "file_suffix=dev-$SHORT_SHA" >> $GITHUB_OUTPUT
+            echo "file_suffix=dev-${GITHUB_SHA:0:7}" >> $GITHUB_OUTPUT
           fi
 
-      - name: Rename and collect APKs
+      - name: Prepare APKs
         run: |
           mkdir -p output
+          find app/build/outputs/apk -name "*.apk" -type f -exec cp {} output/ \;
           
-          # 查找并复制 APK
-          find app/build/outputs/apk -name "*.apk" -type f | while read apk; do
-            filename=$(basename "$apk")
-            if [[ $filename == *"release"* ]]; then
-              cp "$apk" "output/StorageRedirect-${{ steps.version.outputs.file_suffix }}-release.apk"
-            elif [[ $filename == *"debug"* ]]; then
-              cp "$apk" "output/StorageRedirect-${{ steps.version.outputs.file_suffix }}-debug.apk"
+          cd output
+          for f in *.apk; do
+            if [[ $f == *"release"* ]]; then
+              mv "$f" "StorageRedirect-${{ steps.version.outputs.file_suffix }}-release.apk"
+            elif [[ $f == *"debug"* ]]; then
+              mv "$f" "StorageRedirect-${{ steps.version.outputs.file_suffix }}-debug.apk"
             fi
           done
           
-          echo "APK files:"
-          ls -lah output/
+          ls -lah
 
-      - name: Upload Release APK
+      - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: StorageRedirect-Release-${{ steps.version.outputs.file_suffix }}
-          path: output/*-release.apk
-          if-no-files-found: error
-
-      - name: Upload Debug APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: StorageRedirect-Debug-${{ steps.version.outputs.file_suffix }}
-          path: output/*-debug.apk
-          if-no-files-found: warn
+          name: StorageRedirect-APKs
+          path: output/*.apk
 
       - name: Create Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: output/*.apk
-          draft: false
-          prerelease: false
           generate_release_notes: true
-          body: |
-            ## Storage Redirect Module v${{ steps.version.outputs.version_name }}
-            
-            ### 功能
-            - 🔄 重定向外部存储到应用私有目录
-            - 🎵 豁免音乐下载目录 `kgmusic`
-            - 🔧 Java + Native 双层 Hook
-            - 🎯 目标应用：酷狗音乐 Lite
-            
-            ### 安装
-            1. 安装 LSPosed 框架
-            2. 在 LSPosed 中启用本模块
-            3. 勾选：`com.kugou.android.lite`
-            4. 重启目标应用
-            
-            ### 文件
-            - `release.apk` - 正式版（推荐）
-            - `debug.apk` - 调试版
-            
-            ### 校验
-            ```bash
-            md5sum StorageRedirect-*.apk
-            sha256sum StorageRedirect-*.apk
-            ```
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Generate build summary
-        if: success()
-        run: |
-          echo "## 🎉 Build Successful" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          
-          for apk in output/*.apk; do
-            if [ -f "$apk" ]; then
-              filename=$(basename "$apk")
-              size=$(ls -lh "$apk" | awk '{print $5}')
-              md5=$(md5sum "$apk" | awk '{print $1}')
-              sha256=$(sha256sum "$apk" | awk '{print $1}')
-              
-              echo "### 📦 $filename" >> $GITHUB_STEP_SUMMARY
-              echo "- **Size**: $size" >> $GITHUB_STEP_SUMMARY
-              echo "- **MD5**: \`$md5\`" >> $GITHUB_STEP_SUMMARY
-              echo "- **SHA256**: \`$sha256\`" >> $GITHUB_STEP_SUMMARY
-              echo "" >> $GITHUB_STEP_SUMMARY
-            fi
-          done
-          
-          echo "### ℹ️ Version" >> $GITHUB_STEP_SUMMARY
-          echo "- Name: ${{ steps.version.outputs.version_name }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Code: ${{ steps.version.outputs.version_code }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Commit: \`${GITHUB_SHA:0:7}\`" >> $GITHUB_STEP_SUMMARY

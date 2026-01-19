@@ -41,8 +41,6 @@ jobs:
           chmod +x gradlew
           ./gradlew --version
 
-      # 移除了签名生成步骤
-      
       - name: Build Release APK
         run: ./gradlew assembleRelease --stacktrace --no-daemon
 
@@ -104,3 +102,10 @@ jobs:
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+我选择 android {
+    buildTypes {
+        release {
+            signingConfig signingConfigs.debug
+        }
+    }
+} 
